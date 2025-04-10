@@ -1,52 +1,75 @@
-import pandas as pd
-import ast
-import numpy as np
 import gradio as gr
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
+import requests
 
-# Load data
-df = pd.read_csv("assessments_with_embeddings.csv")
-df["embedding"] = df["embedding"].apply(ast.literal_eval)
+BASE_URL = "https://flask-recommender-api-production.up.railway.app"
 
-# Load model
-model = SentenceTransformer("all-MiniLM-L6-v2")
-all_embeddings = np.vstack(df["embedding"].to_numpy())
+def fetch_recommendations(user_query):
+    try:
+        
+        health_resp = requests.get(f"{BASE_URL}/health")
+        if health_resp.status_code != 200:
+            return "❌ Backend is not healthy or unavailable."
 
-# Inference function
-def recommend_assessments(user_input):
-    input_embedding = model.encode([user_input])
-    similarities = cosine_similarity(input_embedding, all_embeddings)[0]
-    df_copy = df.copy()
-    df_copy["similarity"] = similarities
+        
+        headers = {"Content-Type": "application/json"}
+        payload = {"query": user_query}
 
-    top_matches = df_copy.sort_values(by="similarity", ascending=False).head(10)
+        response = requests.post(f"{BASE_URL}/recommend", json=payload, headers=headers)
+        response.raise_for_status()
+        data = response.json()
 
-    return top_matches[[
-        "Assessment name",
-        "Remote Testing Support",
-        "Adaptive/IRT",
-        "Test type",
-        "Duration(min)"
-    ]]
+        if "recommended_assessments" not in data:
+            return "No assessments found or unexpected response."
 
-# UI with Gradio Blocks
-with gr.Blocks() as interface:
-    gr.Markdown("## 🔍 SHL Assessment Recommender")
-    gr.Markdown("Enter a job role or skill to get the top 10 relevant SHL assessments.")
+      
+        rows = []
+        for item in data["recommended_assessments"]:
+            url_link = f'<a href="{item["url"]}" target="_blank">link</a>'
+            test_types = ", ".join(item["test_type"])
+            rows.append(f"""
+                <tr>
+                    <td>{item["description"]}</td>
+                    <td>{url_link}</td>
+                    <td>{item["adaptive_support"]}</td>
+                    <td>{item["remote_support"]}</td>
+                    <td>{item["duration"]} min</td>
+                    <td>{test_types}</td>
+                </tr>
+            """)
 
-    user_input = gr.Textbox(placeholder="e.g., Data Analyst, Communication Skills", label="Enter Job Role or Skill")
-    output_table = gr.Dataframe(
-        headers=[
-            "Assessment name",
-            "Remote Testing Support",
-            "Adaptive/IRT",
-            "Test type",
-            "Duration(min)"
-        ],
-        label="Recommended Assessments"
-    )
+        html_table = f"""
+        <table border="1" style="border-collapse: collapse; width: 100%;">
+            <tr>
+                <th>Description</th>
+                <th>URL</th>
+                <th>Adaptive</th>
+                <th>Remote</th>
+                <th>Duration</th>
+                <th>Test Type</th>
+            </tr>
+            {''.join(rows)}
+        </table>
+        """
 
-    user_input.change(fn=recommend_assessments, inputs=user_input, outputs=output_table)
+        return html_table
 
-interface.launch()
+    except requests.exceptions.RequestException as e:
+        return f"❌ Error contacting backend: {str(e)}"
+    except Exception as e:
+        return f"❌ Unexpected error: {str(e)}"
+
+
+with gr.Blocks() as demo:
+    gr.Markdown("## 🔍 SHL Assessment Recommender (Frontend)")
+    gr.Markdown("Type your job description or skillset and click *Enter* to get relevant assessments.")
+    
+    with gr.Row():
+        user_input = gr.Textbox(placeholder="e.g. Looking for a software engineer", label="Job Query", lines=1)
+        submit_btn = gr.Button("Enter")
+
+    output_html = gr.HTML(label="Recommended Assessments")
+
+    submit_btn.click(fn=fetch_recommendations, inputs=user_input, outputs=output_html)
+
+if __name__ == "__main__":
+    demo.launch()
