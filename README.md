@@ -1,4 +1,4 @@
-# SHL Assessment Recommendation Engine
+# SHL Assessment  Recommendation Engine
 
 This project provides intelligent SHL assessment recommendations based on natural language queries such as job descriptions or skill requirements. It combines a semantic search backend powered by SentenceTransformers with an interactive Gradio-based frontend interface.
 
