@@ -40,5 +40,6 @@ The system is deployed across two services:
 ├── assessments_with_embeddings-2.csv  # Assessment metadata and vector embeddings
 ├── requirements.txt               # Project dependencies
 ├── README.md                      # Project documentation
+
 🔗 [Live Demo](https://huggingface.co/spaces/Lastinn/shl_recommendation_engine)
 
